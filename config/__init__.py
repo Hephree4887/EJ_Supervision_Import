@@ -6,8 +6,10 @@ from .settings import (
     parse_database_name,
     SecretManager,
     ConfigurationManager,
+    get_settings,
     get_secure_settings,
     migrate_existing_configuration,
+    settings,
 )
 
 __all__ = [

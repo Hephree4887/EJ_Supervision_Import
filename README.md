@@ -79,12 +79,6 @@ python 03_FinancialDB_Import.py
 python 04_LOBColumns.py
 ```
 
-#### Option 3: Secure Version
-```bash
-# For enhanced security (recommended for production)
-python migrate_to_secure_system.py
-python 01_JusticeDB_Import_Secure.py
-```
 
 ## Architecture
 
@@ -129,7 +123,6 @@ ej-supervision-import/
 │   └── migrations.py     # Migration tracking
 ├── etl/                   # Core ETL logic
 │   ├── base_importer.py  # Base importer class
-│   ├── secure_base_importer.py # Secure base class
 │   ├── core.py           # Core utilities
 │   └── runner.py         # Script orchestration
 ├── sql_scripts/          # SQL scripts by database
@@ -140,7 +133,6 @@ ej-supervision-import/
 ├── utils/                # Utility modules
 │   ├── etl_helpers.py    # ETL helper functions
 │   ├── logging_helper.py # Logging utilities
-│   └── sql_security.py   # SQL security validation
 ├── tests/                # Unit tests
 ├── 01_JusticeDB_Import.py    # Justice importer
 ├── 02_OperationsDB_Import.py # Operations importer
@@ -255,18 +247,6 @@ To resume an interrupted migration, keep these files and set `RESUME=1`.
 
 ## Security Considerations
 
-### Secure Version Features
-- SQL injection prevention
-- Encrypted credential storage
-- Comprehensive audit logging
-- Input validation and sanitization
-
-### Migration to Secure Version
-```bash
-python migrate_to_secure_system.py
-```
-
-See [README_SECURE_IMPLEMENTATION.md](README_SECURE_IMPLEMENTATION.md) for details.
 
 ### Best Practices
 1. Use minimum required database permissions
