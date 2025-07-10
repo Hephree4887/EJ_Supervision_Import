@@ -47,11 +47,12 @@ def get_engine(url: URL | str) -> Engine:
     key = str(url)
     engine = _engines.get(key)
     if engine is None:
+        # Use default pool settings since they're not in the current settings class
         engine = sqlalchemy.create_engine(
             url,
-            pool_size=settings.db_pool_size,
-            max_overflow=settings.db_max_overflow,
-            pool_timeout=settings.db_pool_timeout,
+            pool_size=5,
+            max_overflow=10,
+            pool_timeout=30,
             pool_pre_ping=True,
         )
         _engines[key] = engine
@@ -70,14 +71,20 @@ def get_mssql_connection(conn_str: str) -> Connection:
 
 def get_source_connection() -> Connection:
     """Connect to the configured MSSQL source database."""
-    conn = settings.mssql_source_conn_str
-    return get_mssql_connection(conn.get_secret_value() if conn else "")
+    # Check environment variable first, then settings property
+    conn_str = os.environ.get('MSSQL_SOURCE_CONN_STR') or settings.mssql_target_conn_str
+    if not conn_str:
+        raise ValueError("No source connection string configured")
+    return get_mssql_connection(conn_str)
 
 
 def get_target_connection() -> Connection:
     """Connect to the configured MSSQL target database."""
-    conn = settings.mssql_target_conn_str
-    return get_mssql_connection(conn.get_secret_value())
+    # FIXED: Check environment variable first, then settings property
+    conn_str = os.environ.get('MSSQL_TARGET_CONN_STR') or settings.mssql_target_conn_str
+    if not conn_str:
+        raise ValueError("No target connection string configured")
+    return get_mssql_connection(conn_str)
 
 
 def get_mysql_connection(
@@ -88,15 +95,11 @@ def get_mysql_connection(
     port: int | None = None,
 ) -> Connection:
     """Return a pooled MySQL connection using provided args or configuration."""
-    host = host or os.getenv("MYSQL_HOST") or settings.mysql_host
-    user = user or os.getenv("MYSQL_USER") or settings.mysql_user
-    env_pass = os.getenv("MYSQL_PASSWORD")
-    settings_pass = (
-        settings.mysql_password.get_secret_value() if settings.mysql_password else None
-    )
-    password = password or env_pass or settings_pass
-    database = database or os.getenv("MYSQL_DATABASE") or settings.mysql_database
-    port_value = port or os.getenv("MYSQL_PORT") or settings.mysql_port or 3306
+    host = host or os.getenv("MYSQL_HOST")
+    user = user or os.getenv("MYSQL_USER") 
+    password = password or os.getenv("MYSQL_PASSWORD")
+    database = database or os.getenv("MYSQL_DATABASE")
+    port_value = port or os.getenv("MYSQL_PORT") or 3306
     port = int(port_value)
 
     if not all([host, user, password, database]):

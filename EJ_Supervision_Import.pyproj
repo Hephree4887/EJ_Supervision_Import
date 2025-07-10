@@ -89,9 +89,7 @@
   <ItemGroup>
     <Content Include=".env" />
     <Content Include=".gitignore" />
-    <Content Include="code_review\00_suggestions.txt" />
-    <Content Include="code_review\01_plan.txt" />
-    <Content Include="code_review\03_completed.txt" />
+    <Content Include="code_review\Comprehensive Code Review - EJ_Supervision_Import.pdf" />
     <Content Include="config\secure_config.json" />
     <Content Include="config\poopoo.json" />
     <Content Include="LICENSE.txt" />

@@ -1,4 +1,3 @@
-
 """Graphical wrapper to run the ETL scripts sequentially.
 
 This module provides a small Tk based application that builds a SQL Server
@@ -91,22 +90,23 @@ class App(tk.Tk):
         }
     
     def _save_config(self):
-        """Save current configuration to JSON file"""
-        config = App._load_config(self)
-        config.update({
+        """Save current configuration using the simplified system"""
+        # Build the complete config object
+        config = {
             "driver": self.entries["driver"].get(),
             "server": self.entries["server"].get(),
             "database": self.entries["database"].get(),
             "user": self.entries["user"].get(),
-            "csv_dir": self.csv_dir_var.get(),
+            "password": self.entries["password"].get(),
+            "ej_csv_dir": self.csv_dir_var.get(),
+            "ej_log_dir": self.log_dir_var.get(),  # ADD THIS LINE
             "include_empty_tables": self.include_empty_var.get(),
-        })
-        
+            "always_include_tables": getattr(self, 'always_include_tables', [])
+        }
+    
         try:
-            config_path = Path(CONFIG_FILE)
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            with config_path.open("w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
+            # Save directly to JSON file
+            save_config_to_file(config)
         except Exception as e:
             logger.error(f"Error saving config: {e}")
     
@@ -128,6 +128,8 @@ class App(tk.Tk):
             self.entries[field.lower()] = ent
 
         row = len(fields)
+    
+        # CSV Directory field
         lbl = tk.Label(self, text="CSV Directory:")
         lbl.grid(row=row, column=0, sticky="e", padx=5, pady=2)
         self.csv_dir_var = tk.StringVar()
@@ -138,13 +140,29 @@ class App(tk.Tk):
         browse_btn = tk.Button(self, text="Browse", command=self._browse_csv_dir)
         browse_btn.grid(row=row, column=2, padx=5, pady=2)
 
+        row += 1
+    
+        # Log Directory field - ADD THIS
+        lbl = tk.Label(self, text="Log Directory:")
+        lbl.grid(row=row, column=0, sticky="e", padx=5, pady=2)
+        self.log_dir_var = tk.StringVar()
+        if "ej_log_dir" in self.config_values:
+            self.log_dir_var.set(self.config_values["ej_log_dir"])
+        ent = tk.Entry(self, textvariable=self.log_dir_var, width=40)
+        ent.grid(row=row, column=1, padx=5, pady=2)
+        browse_log_btn = tk.Button(self, text="Browse", command=self._browse_log_dir)
+        browse_log_btn.grid(row=row, column=2, padx=5, pady=2)
+
+        row += 1
+
         # checkbox to include empty tables
         self.include_empty_var = tk.BooleanVar(value=self.config_values.get("include_empty_tables", False))
         chk = tk.Checkbutton(self, text="Include empty tables", variable=self.include_empty_var)
-        chk.grid(row=row+1, column=0, columnspan=2, pady=(5, 0))
+        chk.grid(row=row, column=0, columnspan=2, pady=(5, 0))
 
+        row += 1
         test_btn = tk.Button(self, text="Test Connection", command=self.test_connection)
-        test_btn.grid(row=row+2, column=0, columnspan=2, pady=10)
+        test_btn.grid(row=row, column=0, columnspan=2, pady=10)
     
     def _browse_csv_dir(self):
         """Open a directory chooser dialog and store the selected path."""
@@ -264,10 +282,15 @@ class App(tk.Tk):
         self.csv_dir = self.csv_dir_var.get()
         if self.csv_dir:
             os.environ["EJ_CSV_DIR"] = self.csv_dir
-        
+    
+        # ADD THIS: Set log directory in environment
+        log_dir = self.log_dir_var.get()
+        if log_dir:
+            os.environ["EJ_LOG_DIR"] = log_dir
+    
         # Save current configuration
         self._save_config()
-        
+    
         self._show_script_widgets()
     
     def clear_output(self):
