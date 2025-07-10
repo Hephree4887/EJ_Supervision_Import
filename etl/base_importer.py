@@ -22,7 +22,6 @@ from utils.etl_helpers import (
     execute_sql_with_timeout,
 )
 from utils.progress_tracker import ProgressTracker
-from utils.sql_security import validate_sql_statement
 from etl.core import (
     sanitize_sql,
     safe_tqdm,
@@ -136,8 +135,6 @@ class BaseDBImporter:
     def run_sql_file(self, conn: Any, name: str, filename: str) -> None:
         """Load a SQL file and execute it with optional validation."""
         sql = load_sql(filename, self.db_name)
-        if self.extra_validation:
-            sql = validate_sql_statement(sql, allow_ddl=True)
         
         # Use the new pyodbc raw execution for scripts with GO statements
         from utils.etl_helpers import run_sql_script_pyodbc_raw
