@@ -35,6 +35,7 @@
     <Compile Include="db\mssql.py" />
     <Compile Include="db\__init__.py" />
     <Compile Include="etl\base_importer.py" />
+    <Compile Include="etl\configurable_importer.py" />
     <Compile Include="etl\core.py" />
     <Compile Include="etl\runner.py" />
     <Compile Include="etl\__init__.py" />
@@ -42,7 +43,6 @@
     <Compile Include="sql_scripts\financial\__init__.py" />
     <Compile Include="sql_scripts\justice\__init__.py" />
     <Compile Include="sql_scripts\lob\__init__.py" />
-    <Compile Include="sql_scripts\misc\__init__.py" />
     <Compile Include="sql_scripts\operations\__init__.py" />
     <Compile Include="sql_scripts\__init__.py" />
     <Compile Include="tests\test_base_importer.py" />
@@ -74,7 +74,6 @@
     <Folder Include="sql_scripts\justice\" />
     <Folder Include="sql_scripts\justice\__pycache__\" />
     <Folder Include="sql_scripts\lob\" />
-    <Folder Include="sql_scripts\misc\" />
     <Folder Include="sql_scripts\operations\" />
     <Folder Include="sql_scripts\operations\__pycache__\" />
   </ItemGroup>
@@ -102,7 +101,6 @@
     <Content Include="sql_scripts\justice\update_joins.sql" />
     <Content Include="sql_scripts\justice\__pycache__\__init__.cpython-39.pyc" />
     <Content Include="sql_scripts\lob\gather_lobs.sql" />
-    <Content Include="sql_scripts\misc\gather_lobs.sql" />
     <Content Include="sql_scripts\operations\create_primarykeys_operations.sql" />
     <Content Include="sql_scripts\operations\gather_documentids.sql" />
     <Content Include="sql_scripts\operations\gather_drops_and_selects_operations.sql" />

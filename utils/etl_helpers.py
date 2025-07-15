@@ -152,6 +152,7 @@ def run_sql_script_pyodbc_raw(
         logger.info(f"Pyodbc script {name} failed after {elapsed:.2f} seconds")
         record_failure()
         raise SQLExecutionError(sql, e, table_name=name)
+
 def execute_sql_with_timeout(
     conn: Any,
     sql: str,
@@ -175,6 +176,7 @@ def execute_sql_with_timeout(
         else:
             cursor.execute(sql)
         return cursor
+
 def load_sql(filename: str, db_name: Optional[str] = None) -> str:
     """Load a SQL file from the ``sql_scripts`` package.
 
@@ -245,6 +247,7 @@ def load_sql(filename: str, db_name: Optional[str] = None) -> str:
         logger.debug(f"Replaced database placeholder in {filename} with {db_name}")
 
     return sql
+
 def log_exception_to_file(error_details: str, log_path: str) -> None:
     """Append exception details to a log file."""
     try:
@@ -318,6 +321,7 @@ def run_sql_step(
         logger.info(f"Step {name} failed after {elapsed:.2f} seconds")
         record_failure()
         raise SQLExecutionError(sql, e, table_name=name)
+
 def run_sql_step_with_retry(
     conn: Any,
     name: str,
@@ -353,6 +357,7 @@ def run_sql_step_with_retry(
                 )
 
             time.sleep(2**attempt)
+
 def run_sql_script(
     conn: Any, name: str, sql: str, timeout: int = ETLConstants.DEFAULT_SQL_TIMEOUT, raw_execution: bool = False
 ) -> None:
@@ -470,5 +475,85 @@ def run_sql_script(
         elapsed = time.time() - start_time
         logger.error(f"Error in script {name}: {e}")
         logger.info(f"Script {name} failed after {elapsed:.2f} seconds")
+        record_failure()
+        raise SQLExecutionError(sql, e, table_name=name)
+
+def run_sql_script_no_tracking(
+    conn: Any, name: str, sql: str, timeout: int = ETLConstants.DEFAULT_SQL_TIMEOUT
+) -> None:
+    """Execute a multi-statement SQL script without migration tracking."""
+    logger.info(f"Starting script (no tracking): {name}")
+    
+    start_time = time.time()
+    try:
+        go_batches = re.split(r'(?:^|\n)\s*GO\s*(?:\r?\n|$)', sql, flags=re.IGNORECASE | re.MULTILINE)
+        
+        logger.info(f"SQL script split into {len(go_batches)} batches")
+        
+        total_statements = 0
+
+        # SQLAlchemy connection
+        if hasattr(conn, "execute") and not hasattr(conn, "cursor"):
+            for batch_idx, batch in enumerate(go_batches):
+                if not batch.strip():
+                    logger.debug(f"Skipping empty batch {batch_idx + 1}")
+                    continue
+                    
+                logger.info(f"Executing batch {batch_idx + 1} of {len(go_batches)} at {time.strftime('%H:%M:%S')}")
+                
+                batch_sql = batch.strip()
+                if batch_sql and not batch_sql.startswith("--"):
+                    try:
+                        logger.debug(f"Batch {batch_idx + 1} SQL (first 200 chars): {batch_sql[:200]}...")
+                        
+                        conn.execute(sqlalchemy.text(batch_sql))
+                        conn.commit()
+                        
+                        logger.info(f"Completed batch {batch_idx + 1} successfully at {time.strftime('%H:%M:%S')}")
+                        total_statements += 1
+                        time.sleep(0.1)
+                        
+                    except Exception as e:
+                        logger.error(f"Error executing batch {batch_idx + 1}: {e}")
+                        raise SQLExecutionError(batch_sql, e, table_name=name)
+                
+        # DB-API connection
+        else:
+            with conn.cursor() as cursor:
+                cursor.execute(f"SET LOCK_TIMEOUT {timeout * 1000}")
+
+                for batch_idx, batch in enumerate(go_batches):
+                    if not batch.strip():
+                        logger.debug(f"Skipping empty batch {batch_idx + 1}")
+                        continue
+                        
+                    logger.info(f"Executing batch {batch_idx + 1} of {len(go_batches)} at {time.strftime('%H:%M:%S')}")
+                    
+                    batch_sql = batch.strip()
+                    if batch_sql and not batch_sql.startswith("--"):
+                        try:
+                            logger.debug(f"Batch {batch_idx + 1} SQL (first 200 chars): {batch_sql[:200]}...")
+                            
+                            cursor.execute(batch_sql)
+                            conn.commit()
+                            
+                            logger.info(f"Completed batch {batch_idx + 1} successfully at {time.strftime('%H:%M:%S')}")
+                            total_statements += 1
+                            time.sleep(0.1)
+                            
+                        except Exception as e:
+                            logger.error(f"Error executing batch {batch_idx + 1}: {e}")
+                            raise SQLExecutionError(batch_sql, e, table_name=name)
+
+        elapsed = time.time() - start_time
+        logger.info(f"Completed script (no tracking): {name} - executed {total_statements} batches in {elapsed:.2f} seconds")
+        record_success()
+        # NOTE: We deliberately do NOT call record_migration() here
+        
+    except SQLExecutionError:
+        raise
+    except Exception as e:
+        elapsed = time.time() - start_time
+        logger.error(f"Error in script {name}: {e}")
         record_failure()
         raise SQLExecutionError(sql, e, table_name=name)

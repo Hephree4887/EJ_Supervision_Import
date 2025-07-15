@@ -68,7 +68,39 @@ class BaseDBImporter:
             action="store_true",
             help="Enable extra SQL validation checks",
         )
+        parser.add_argument(
+            "--force-fresh-run",
+            action="store_true",
+            help="Force a fresh run by clearing migration history",
+        )
         return parser.parse_args()
+
+    def clear_migration_history(self, conn: Any) -> None:
+        """Clear the migration history to force re-execution of all scripts."""
+        logger.info(f"Clearing migration history for fresh run of {self.DB_TYPE}")
+        try:
+            from db.migrations import VERSION_TABLE, ensure_version_table
+            
+            # Ensure the table exists first
+            ensure_version_table(conn)
+            
+            # Clear all migration records
+            clear_sql = f"DELETE FROM dbo.{VERSION_TABLE}"
+            
+            if hasattr(conn, "execute") and not hasattr(conn, "cursor"):
+                # SQLAlchemy connection
+                conn.execute(sqlalchemy.text(clear_sql))
+                conn.commit()
+            else:
+                # DB-API connection
+                with conn.cursor() as cursor:
+                    cursor.execute(clear_sql)
+                conn.commit()
+            
+            logger.info(f"Successfully cleared migration history for {self.DB_TYPE}")
+            
+        except Exception as e:
+            logger.warning(f"Could not clear migration history: {e}. Continuing anyway...")
 
     def validate_environment(self) -> None:
         """Validate required environment variables."""
@@ -95,6 +127,7 @@ class BaseDBImporter:
             "skip_pk_creation": False,
             "sql_timeout": ETLConstants.DEFAULT_SQL_TIMEOUT,  # seconds
             "csv_chunk_size": ETLConstants.DEFAULT_CSV_CHUNK_SIZE,
+            "force_fresh_run": False,  # Add this option
         }
         
         self.config = load_config(args.config_file, default_config)
@@ -113,21 +146,26 @@ class BaseDBImporter:
         if os.environ.get("CSV_CHUNK_SIZE"):
             self.config["csv_chunk_size"] = int(os.environ.get("CSV_CHUNK_SIZE"))
         
+        # NEW: Check for force fresh run - either from GUI (RESUME != "1") or command line
+        if os.environ.get("RESUME") != "1" or getattr(args, "force_fresh_run", False):
+            self.config["force_fresh_run"] = True
+            logger.info(f"Force fresh run enabled for {self.DB_TYPE}")
+        
         # Override config with command line arguments
-        if args.include_empty:
+        if hasattr(args, "include_empty") and args.include_empty:
             self.config["include_empty_tables"] = True
-        if args.skip_pk_creation:
+        if hasattr(args, "skip_pk_creation") and args.skip_pk_creation:
             self.config["skip_pk_creation"] = True
         if hasattr(args, "csv_chunk_size") and args.csv_chunk_size:
             self.config["csv_chunk_size"] = args.csv_chunk_size
         
         # Set up paths
-        self.config['log_file'] = args.log_file or os.path.join(
+        self.config['log_file'] = getattr(args, "log_file", None) or os.path.join(
             os.environ.get("EJ_LOG_DIR", ""), 
             self.config["log_filename"]
         )
         
-        self.config['csv_file'] = args.csv_file or os.path.join(
+        self.config['csv_file'] = getattr(args, "csv_file", None) or os.path.join(
             os.environ.get("EJ_CSV_DIR", ""),
             self.config["csv_filename"]
         )
@@ -776,11 +814,12 @@ class BaseDBImporter:
             self.validate_environment()
             self.load_config(args)
 
+            # Always delete progress files for fresh start when run from GUI
             if os.environ.get("RESUME") != "1":
                 self.progress.delete()
 
             # Set up logging level
-            if args.verbose:
+            if hasattr(args, "verbose") and args.verbose:
                 logging.getLogger().setLevel(logging.DEBUG)
 
             # Verify database connectivity before proceeding
@@ -796,6 +835,10 @@ class BaseDBImporter:
 
             # Begin database operations
             with get_target_connection() as target_conn:
+                # NEW: Clear migration history for fresh run
+                if self.config.get("force_fresh_run", False):
+                    self.clear_migration_history(target_conn)
+                
                 # Execute specific pre-processing steps
                 self.execute_preprocessing(target_conn)
                 

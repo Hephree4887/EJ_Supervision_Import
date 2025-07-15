@@ -12,7 +12,7 @@ from tqdm import tqdm
 import tkinter as tk
 from tkinter import messagebox
 
-import pyodbc
+import sqlalchemy
 from db.connections import get_target_connection
 from utils.logging_helper import setup_logging, operation_counts
 from config.settings import settings, parse_database_name
@@ -21,7 +21,7 @@ from config import ETLConstants
 from utils.etl_helpers import (
     log_exception_to_file,
     load_sql,
-    run_sql_script,
+    run_sql_script_no_tracking,  
     transaction_scope,
     execute_sql_with_timeout,
 )
@@ -66,7 +66,6 @@ def parse_args() -> argparse.Namespace:
         help="Enable verbose logging."
     )
     return parser.parse_args()
-
 def validate_environment() -> None:
     """Validate required environment variables and their values."""
     required_vars = {
@@ -96,7 +95,6 @@ def validate_environment() -> None:
             logger.info(f"Using {var}={value}")
         else:
             logger.info(f"{var} not set. {desc}")
-
 def load_config(config_file: str | None = None) -> dict[str, Any]:
     """Load configuration from JSON file if provided, otherwise use defaults."""
     config: dict[str, Any] = {
@@ -117,8 +115,7 @@ def load_config(config_file: str | None = None) -> dict[str, Any]:
             logger.error(f"Error loading config file: {e}")
     
     return config
-
-def get_max_length(conn, schema, table, column, datatype, timeout):
+def get_max_length(conn: Any, schema: str, table: str, column: str, datatype: str, timeout: int) -> Optional[int]:
     """Determine the maximum length needed for a text/varchar column."""
     try:
         # Validate identifiers to prevent SQL injection
@@ -138,10 +135,9 @@ def get_max_length(conn, schema, table, column, datatype, timeout):
         cur = execute_sql_with_timeout(conn, sql, timeout=timeout)
         result = cur.fetchone()
         return result[0] if result and result[0] is not None else 0
-    except (SQLExecutionError, pyodbc.Error) as e:
+    except Exception as e:
         logger.error(f"Error getting max length for {schema}.{table}.{column}: {e}")
         return None
-
 def build_alter_column_sql(
     schema: str,
     table: str,
@@ -156,16 +152,17 @@ def build_alter_column_sql(
         return f"ALTER TABLE [{schema}].[{table}] ALTER COLUMN [{column}] TEXT NULL"
     else:
         return f"ALTER TABLE [{schema}].[{table}] ALTER COLUMN [{column}] VARCHAR({max_length}) NULL"
-
-def create_lob_tracking_table(conn: pyodbc.Connection, config: dict[str, Any]) -> None:
+def create_lob_tracking_table(conn: Any, config: dict[str, Any]) -> None:
     """Create the table to track LOB column updates."""
     logger.info("Creating LOB_COLUMN_UPDATES tracking table")
     gather_lobs_sql = load_sql('lob/gather_lobs.sql', DB_NAME)
-    run_sql_script(conn, 'gather_lobs', gather_lobs_sql, timeout=config['sql_timeout'])
+    
+    # Use run_sql_script_no_tracking to ensure this always executes
+    run_sql_script_no_tracking(conn, 'gather_lobs', gather_lobs_sql, timeout=config['sql_timeout'])
+    
     logger.info("LOB tracking table created successfully")
-
 def gather_lob_columns(
-    conn: pyodbc.Connection,
+    conn: Any,
     config: dict[str, Any],
     log_file: str,
 ) -> None:
@@ -203,9 +200,36 @@ def gather_lob_columns(
             conn, query, timeout=config["sql_timeout"]
         )
 
-        # Since we're using pyodbc, we can simplify:
-        columns = [desc[0] for desc in cursor.description]
-        rows = cursor.fetchall()
+        # Handle cursor results - force everything to be dictionaries
+        try:
+            if hasattr(cursor, "mappings"):
+                # SQLAlchemy 1.4+ CursorResult object
+                rows = list(cursor.mappings())
+                logger.info(f"Using SQLAlchemy mappings, got {len(rows)} rows")
+            elif hasattr(cursor, "keys") and callable(cursor.keys):
+                # Older SQLAlchemy versions
+                columns = cursor.keys()
+                rows_data = cursor.fetchall()
+                rows = [dict(zip(columns, row)) for row in rows_data]
+                logger.info(f"Using SQLAlchemy keys/fetchall, got {len(rows)} rows")
+            elif hasattr(cursor, "description"):
+                # Standard DB-API cursor (pyodbc)
+                columns = [desc[0] for desc in cursor.description]
+                rows_data = cursor.fetchall()
+                rows = [dict(zip(columns, row)) for row in rows_data]
+                logger.info(f"Using DB-API description, got {len(rows)} rows")
+            else:
+                # Last resort fallback
+                logger.error("Unknown cursor type, cannot process")
+                return
+        except Exception as e:
+            logger.error(f"Error processing cursor results: {e}")
+            return
+
+        # Verify we have data
+        if not rows:
+            logger.info("No LOB columns found to process")
+            return
 
         batch_size = config.get(
             "batch_size", ETLConstants.DEFAULT_BULK_INSERT_BATCH_SIZE
@@ -214,22 +238,31 @@ def gather_lob_columns(
         processed = 0
         progress = tqdm(total=len(rows), desc="Analyzing LOB Columns", unit="column")
         
-        # Prepare insert query
+        # Prepare insert query using SQLAlchemy style
         insert_sql = f"""
             INSERT INTO {DB_NAME}.dbo.LOB_COLUMN_UPDATES
             (SchemaName, TableName, ColumnName, DataType, CurrentLength, RowCnt, MaxLen, AlterStatement)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (:schema_name, :table_name, :column_name, :datatype, :current_length, :row_cnt, :max_len, :alter_statement)
         """
         
-        cur = conn.cursor()
         for row in rows:
-            row_dict = dict(zip(columns, row))
-            schema_name = row_dict.get("SchemaName")
-            table_name = row_dict.get("TableName")
-            column_name = row_dict.get("ColumnName")
-            datatype = row_dict.get("DataType")
-            row_cnt = row_dict.get("RowCnt") or 0
+            # All rows should be dictionaries at this point
+            if not isinstance(row, dict):
+                logger.error(f"Expected dictionary, got {type(row)}: {row}")
+                continue
+                
+            schema_name = row.get("SchemaName")
+            table_name = row.get("TableName")
+            column_name = row.get("ColumnName")
+            datatype = row.get("DataType")
+            row_cnt = row.get("RowCnt") or 0
             
+            # Validate required fields
+            if not all([schema_name, table_name, column_name, datatype]):
+                logger.error(f"Missing required fields in row: {row}")
+                continue
+            
+            # Skip empty tables unless configured otherwise
             overrides = {t.lower() for t in settings.always_include_tables}
             full_name = f"{schema_name}.{table_name}".lower()
             if (
@@ -257,23 +290,22 @@ def gather_lob_columns(
                     max_length,
                 )
 
-                # FIX: Create separate direct SQL INSERT statement for this parameter style
+                # Use SQLAlchemy-style parameterized query execution
                 try:
-                    cur.execute(
-                        insert_sql,
-                        (
-                            schema_name,
-                            table_name,
-                            column_name,
-                            datatype,
-                            row_dict.get("CurrentLength"),
-                            row_cnt,
-                            max_length,
-                            alter_column_sql,
-                        ),
+                    conn.execute(
+                        sqlalchemy.text(insert_sql),
+                        {
+                            'schema_name': schema_name,
+                            'table_name': table_name,
+                            'column_name': column_name,
+                            'datatype': datatype,
+                            'current_length': row.get("CurrentLength"),
+                            'row_cnt': row_cnt,
+                            'max_len': max_length,
+                            'alter_statement': alter_column_sql,
+                        }
                     )
-                    conn.last_cursor = cur
-                except (SQLExecutionError, pyodbc.Error) as e:
+                except Exception as e:
                     conn.rollback()
                     error_msg = (
                         f"Error inserting LOB column {schema_name}.{table_name}.{column_name}: {e}"
@@ -281,7 +313,7 @@ def gather_lob_columns(
                     logger.error(error_msg)
                     log_exception_to_file(error_msg, log_file)
                     
-            except (SQLExecutionError, pyodbc.Error) as e:
+            except Exception as e:
                 conn.rollback()
                 error_msg = (
                     f"Error processing LOB column {schema_name}.{table_name}.{column_name}: {e}"
@@ -299,9 +331,8 @@ def gather_lob_columns(
         if processed % batch_size != 0:
             conn.commit()
         logger.info(f"Analyzed and cataloged {processed} LOB columns")
-
 def execute_lob_column_updates(
-    conn: pyodbc.Connection,
+    conn: Any,
     config: dict[str, Any],
     log_file: str,
 ) -> None:
@@ -320,18 +351,42 @@ def execute_lob_column_updates(
             conn, query, timeout=config["sql_timeout"]
         )
         
-        # Handle different cursor types
+        # Standardized cursor handling
+        columns = None
         try:
-            # Try SQLAlchemy style
-            columns = cursor.keys()
-            rows = cursor.fetchall()
-        except AttributeError:
-            # Try PyODBC style
-            columns = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchall()
+            if hasattr(cursor, "mappings"):
+                # SQLAlchemy 1.4+ CursorResult object - returns dictionaries directly
+                rows = list(cursor.mappings())
+                logger.debug(f"Using SQLAlchemy mappings, got {len(rows)} rows")
+            elif hasattr(cursor, "keys") and callable(cursor.keys):
+                # Older SQLAlchemy versions
+                columns = cursor.keys()
+                rows_data = cursor.fetchall()
+                rows = [dict(zip(columns, row)) for row in rows_data]
+                logger.debug(f"Using SQLAlchemy keys/fetchall, got {len(rows)} rows")
+            elif hasattr(cursor, "description"):
+                # Standard DB-API cursor (pyodbc)
+                columns = [desc[0] for desc in cursor.description]
+                rows_data = cursor.fetchall()
+                rows = [dict(zip(columns, row)) for row in rows_data]
+                logger.debug(f"Using DB-API description, got {len(rows)} rows")
+            else:
+                # Last resort fallback
+                rows = list(cursor)
+        except Exception as e:
+            logger.error(f"Error processing cursor results: {e}")
+            return
 
         for idx, row in enumerate(tqdm(rows, desc="Optimizing LOB Columns", unit="column"), 1):
-            row_dict = dict(zip(columns, row))
+            # Since we standardized all cursor results to dictionaries above, 
+            # we should always get dictionaries here
+            if isinstance(row, dict):
+                row_dict = row
+            else:
+                # This should not happen with our standardized approach above
+                logger.error(f"Unexpected row type {type(row)}: {row}")
+                continue
+                
             alter_sql = row_dict.get('Alter_Statement')
 
             if alter_sql:
@@ -342,7 +397,7 @@ def execute_lob_column_updates(
                         timeout=config['sql_timeout'],
                     )
                     conn.commit()
-                except (SQLExecutionError, pyodbc.Error) as e:
+                except Exception as e:
                     conn.rollback()
                     error_msg = f"Failed to alter column (statement {idx}): {e}"
                     logger.error(error_msg)
@@ -350,7 +405,6 @@ def execute_lob_column_updates(
                     raise
 
     logger.info(f"Completed optimizing {len(rows)} LOB columns")
-
 def show_completion_message() -> bool:
     """Show a message box indicating completion."""
     root = tk.Tk()
@@ -426,11 +480,11 @@ def main() -> None:
                     operation_counts["failure"],
                 )
                 
-        except (SQLExecutionError, pyodbc.Error) as e:
+        except Exception as e:
             logger.exception("Unexpected error during database operations")
             raise
                 
-    except (SQLExecutionError, pyodbc.Error) as e:
+    except Exception as e:
         logger.exception("Unexpected error")
         import traceback
         error_details = traceback.format_exc()
@@ -450,6 +504,5 @@ def main() -> None:
             root.destroy()
         except Exception as msgbox_exc:
             logger.error(f"Failed to show error message box: {msgbox_exc}")
-
 if __name__ == "__main__":
     main()

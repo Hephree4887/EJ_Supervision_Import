@@ -37,6 +37,7 @@ class App(tk.Tk):
         self.minsize(900, 700)
         self.conn_str = None
         self.csv_dir = ""
+        self.log_dir = ""
         self.config_values = self._load_config()
         self._create_connection_widgets()
         self.status_labels = {}
@@ -76,6 +77,7 @@ class App(tk.Tk):
                 "user": "",
                 "password": "",
                 "csv_dir": "",
+                "log_dir": "",
                 "include_empty_tables": False,
                 "always_include_tables": []
             }
@@ -86,6 +88,9 @@ class App(tk.Tk):
                 # Handle both old and new CSV directory keys
                 if "ej_csv_dir" in file_config:
                     config["csv_dir"] = file_config["ej_csv_dir"]
+                # Handle log directory
+                if "ej_log_dir" in file_config:
+                    config["log_dir"] = file_config["ej_log_dir"]
         
             # Store always_include_tables as instance attribute
             self.always_include_tables = config.get("always_include_tables", [])
@@ -102,6 +107,7 @@ class App(tk.Tk):
                 "user": "",
                 "password": "",
                 "csv_dir": "",
+                "log_dir": "",
                 "include_empty_tables": False,
                 "always_include_tables": []
             }
@@ -116,6 +122,7 @@ class App(tk.Tk):
             "user": self.entries["user"].get(),
             "password": self.entries["password"].get(),
             "ej_csv_dir": self.csv_dir_var.get(),
+            "ej_log_dir": self.log_dir_var.get(),
             "include_empty_tables": self.include_empty_var.get(),
             "always_include_tables": getattr(self, 'always_include_tables', [])
         }
@@ -144,6 +151,8 @@ class App(tk.Tk):
             self.entries[field.lower()] = ent
 
         row = len(fields)
+        
+        # CSV Directory
         lbl = tk.Label(self, text="CSV Directory:")
         lbl.grid(row=row, column=0, sticky="e", padx=5, pady=2)
         self.csv_dir_var = tk.StringVar()
@@ -152,6 +161,19 @@ class App(tk.Tk):
         ent = tk.Entry(self, textvariable=self.csv_dir_var, width=40)
         ent.grid(row=row, column=1, padx=5, pady=2)
         browse_btn = tk.Button(self, text="Browse", command=self._browse_csv_dir)
+        browse_btn.grid(row=row, column=2, padx=5, pady=2)
+
+        row += 1
+        
+        # LOG Directory
+        lbl = tk.Label(self, text="LOG Directory:")
+        lbl.grid(row=row, column=0, sticky="e", padx=5, pady=2)
+        self.log_dir_var = tk.StringVar()
+        if "log_dir" in self.config_values:
+            self.log_dir_var.set(self.config_values["log_dir"])
+        ent = tk.Entry(self, textvariable=self.log_dir_var, width=40)
+        ent.grid(row=row, column=1, padx=5, pady=2)
+        browse_btn = tk.Button(self, text="Browse", command=self._browse_log_dir)
         browse_btn.grid(row=row, column=2, padx=5, pady=2)
 
         # checkbox to include empty tables
@@ -164,9 +186,15 @@ class App(tk.Tk):
     
     def _browse_csv_dir(self):
         """Open a directory chooser dialog and store the selected path."""
-        directory = filedialog.askdirectory()
+        directory = filedialog.askdirectory(title="Select CSV Directory")
         if directory:
             self.csv_dir_var.set(directory)
+    
+    def _browse_log_dir(self):
+        """Open a directory chooser dialog and store the selected log path."""
+        directory = filedialog.askdirectory(title="Select LOG Directory")
+        if directory:
+            self.log_dir_var.set(directory)
     
     def _show_script_widgets(self):
         """Create buttons and status labels for each ETL script."""
@@ -174,7 +202,7 @@ class App(tk.Tk):
             return
 
         self.script_frame = tk.Frame(self)
-        start_row = len(self.entries) + 3
+        start_row = len(self.entries) + 5  # Updated to account for new LOG Directory row
         self.script_frame.grid(row=start_row, column=0, columnspan=3, sticky="nsew")
         
         # Configure row and column weights to allow expansion
@@ -280,6 +308,9 @@ class App(tk.Tk):
         self.csv_dir = self.csv_dir_var.get()
         if self.csv_dir:
             os.environ["EJ_CSV_DIR"] = self.csv_dir
+        self.log_dir = self.log_dir_var.get()
+        if self.log_dir:
+            os.environ["EJ_LOG_DIR"] = self.log_dir
         
         # Save current configuration
         self._save_config()
