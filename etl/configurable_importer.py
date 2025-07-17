@@ -4,6 +4,8 @@ from typing import Any, Iterable, Tuple
 import argparse
 import logging
 import os
+import tkinter as tk
+from tkinter import messagebox
 from etl.base_importer import BaseDBImporter
 from etl.core import safe_tqdm
 from utils.etl_helpers import transaction_scope
@@ -85,8 +87,81 @@ class ConfigurableDBImporter(BaseDBImporter):
         logger.info("Gathering list of %s tables with SQL Commands to be migrated.", self.DB_TYPE)
         self.run_sql_file(conn, "gather_drops_and_selects", self.gather_drop_select_script)
 
+    def _check_missing_tables_in_joins(self, conn: Any) -> None:
+        """Check for tables that exist in TablesToConvert but not in TableUsedSelects."""
+        try:
+            # Query to find tables in TablesToConvert that don't have corresponding entries in TableUsedSelects
+            check_query = """
+                SELECT COUNT(*) as MissingCount
+                FROM {{DB_NAME}}.dbo.TablesToConvert ttc
+                WHERE NOT EXISTS (
+                    SELECT 1 
+                    FROM {{DB_NAME}}.dbo.TableUsedSelects tus 
+                    WHERE tus.DatabaseName = ttc.DatabaseName 
+                    AND tus.SchemaName = ttc.SchemaName 
+                    AND tus.TableName = ttc.TableName
+                )
+            """
+            
+            cursor = conn.cursor()
+            cursor.execute(check_query)
+            result = cursor.fetchone()
+            missing_count = result[0] if result else 0
+            
+            if missing_count > 0:
+                # Get the actual table names for logging
+                detail_query = """
+                    SELECT ttc.DatabaseName, ttc.SchemaName, ttc.TableName
+                    FROM {{DB_NAME}}.dbo.TablesToConvert ttc
+                    WHERE NOT EXISTS (
+                        SELECT 1 
+                        FROM {{DB_NAME}}.dbo.TableUsedSelects tus 
+                        WHERE tus.DatabaseName = ttc.DatabaseName 
+                        AND tus.SchemaName = ttc.SchemaName 
+                        AND tus.TableName = ttc.TableName
+                    )
+                """
+                
+                cursor.execute(detail_query)
+                missing_tables = cursor.fetchall()
+                
+                # Log the missing tables
+                logger.warning(f"Found {missing_count} tables in TablesToConvert that are not in TableUsedSelects:")
+                for table in missing_tables:
+                    logger.warning(f"  - {table[0]}.{table[1]}.{table[2]}")
+                
+                # Show message box warning
+                try:
+                    # Create a hidden root window for the message box
+                    root = tk.Tk()
+                    root.withdraw()
+                    
+                    message = (f"There are {missing_count} tables from your gather_drops_and_select_script "
+                              f"that are not in your joins CSV file. Please investigate.\n\n"
+                              f"Check the log file for detailed table names.")
+                    
+                    messagebox.showwarning(
+                        f"{self.DB_TYPE} Import Warning",
+                        message
+                    )
+                    
+                    root.destroy()
+                except Exception as gui_error:
+                    # If GUI fails, just log the warning
+                    logger.warning(f"Could not display GUI warning: {gui_error}")
+                    logger.warning(f"WARNING: {missing_count} tables from gather_drops_and_select_script are not in joins CSV file")
+            
+            cursor.close()
+            
+        except Exception as e:
+            logger.error(f"Error checking for missing tables in joins: {e}")
+
     def update_joins_in_tables(self, conn: Any) -> None:
         logger.info("Updating JOINS in TablesToConvert List")
+        
+        # Check for missing tables before running the update
+        self._check_missing_tables_in_joins(conn)
+        
         self.run_sql_file(conn, "update_joins", self.update_joins_script)
         logger.info("Updating JOINS for %s tables is complete.", self.DB_TYPE)
 

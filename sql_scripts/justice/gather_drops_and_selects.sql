@@ -52,7 +52,8 @@ GO
 		    INNER JOIN Justice.sys.partitions p ON i.object_id=p.object_id AND i.index_id=p.index_id
     WHERE 
         t.is_ms_shipped=0 
-        AND t.[type]='U'  
+        AND t.[type]='U' 
+        AND s.[NAME] NOT IN ('ChangeTrackingArchive')
     ORDER BY 
         s.[NAME], t.[NAME]
 GO

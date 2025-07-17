@@ -81,6 +81,7 @@
     <Content Include=".env" />
     <Content Include=".gitignore" />
     <Content Include="code_review\Comprehensive Code Review - EJ_Supervision_Import.pdf" />
+    <Content Include="config\ELPASO.JSON" />
     <Content Include="config\secure_config.json" />
     <Content Include="config\poopoo.json" />
     <Content Include="LICENSE.txt" />
