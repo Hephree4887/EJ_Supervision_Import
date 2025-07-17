@@ -90,47 +90,22 @@ class ConfigurableDBImporter(BaseDBImporter):
     def _check_missing_tables_in_joins(self, conn: Any) -> None:
         """Check for tables that exist in TablesToConvert but not in TableUsedSelects."""
         try:
-            # Query to find tables in TablesToConvert that don't have corresponding entries in TableUsedSelects
-            check_query = """
-                SELECT COUNT(*) as MissingCount
-                FROM {{DB_NAME}}.dbo.TablesToConvert ttc
-                WHERE NOT EXISTS (
-                    SELECT 1 
-                    FROM {{DB_NAME}}.dbo.TableUsedSelects tus 
-                    WHERE tus.DatabaseName = ttc.DatabaseName 
-                    AND tus.SchemaName = ttc.SchemaName 
-                    AND tus.TableName = ttc.TableName
-                )
-            """
+            # Define the path to the missing table check SQL file
+            missing_table_check_script = f"{self.DB_TYPE.lower()}/missing_table_check.sql"
             
+            # Execute the SQL file using the existing run_sql_file method
+            self.run_sql_file(conn, "missing_table_check", missing_table_check_script)
+            
+            # The SQL script returns the count directly, so get the result
             cursor = conn.cursor()
-            cursor.execute(check_query)
             result = cursor.fetchone()
             missing_count = result[0] if result else 0
             
             if missing_count > 0:
-                # Get the actual table names for logging
-                detail_query = """
-                    SELECT ttc.DatabaseName, ttc.SchemaName, ttc.TableName
-                    FROM {{DB_NAME}}.dbo.TablesToConvert ttc
-                    WHERE NOT EXISTS (
-                        SELECT 1 
-                        FROM {{DB_NAME}}.dbo.TableUsedSelects tus 
-                        WHERE tus.DatabaseName = ttc.DatabaseName 
-                        AND tus.SchemaName = ttc.SchemaName 
-                        AND tus.TableName = ttc.TableName
-                    )
-                """
+                # Log the missing table count
+                logger.warning(f"Found {missing_count} tables in TablesToConvert that are not in TableUsedSelects")
                 
-                cursor.execute(detail_query)
-                missing_tables = cursor.fetchall()
-                
-                # Log the missing tables
-                logger.warning(f"Found {missing_count} tables in TablesToConvert that are not in TableUsedSelects:")
-                for table in missing_tables:
-                    logger.warning(f"  - {table[0]}.{table[1]}.{table[2]}")
-                
-                # Show message box warning
+                # Show message box with Yes/No options
                 try:
                     # Create a hidden root window for the message box
                     root = tk.Tk()
@@ -138,21 +113,31 @@ class ConfigurableDBImporter(BaseDBImporter):
                     
                     message = (f"There are {missing_count} tables from your gather_drops_and_select_script "
                               f"that are not in your joins CSV file. Please investigate.\n\n"
-                              f"Check the log file for detailed table names.")
+                              f"Check the log file for detailed table names.\n\n"
+                              f"Do you want to continue with the import process?")
                     
-                    messagebox.showwarning(
+                    result = messagebox.askyesno(
                         f"{self.DB_TYPE} Import Warning",
-                        message
+                        message,
+                        icon="warning"
                     )
                     
                     root.destroy()
+                    
+                    # If user clicks No, stop the program
+                    if not result:
+                        logger.info("User chose to stop the import process due to missing tables in joins CSV.")
+                        import sys
+                        sys.exit(1)
+                    else:
+                        logger.info("User chose to continue the import process despite missing tables in joins CSV.")
+                        
                 except Exception as gui_error:
-                    # If GUI fails, just log the warning
+                    # If GUI fails, just log the warning and continue
                     logger.warning(f"Could not display GUI warning: {gui_error}")
                     logger.warning(f"WARNING: {missing_count} tables from gather_drops_and_select_script are not in joins CSV file")
-            
-            cursor.close()
-            
+                    logger.info("Continuing with import process since GUI dialog failed.")
+    
         except Exception as e:
             logger.error(f"Error checking for missing tables in joins: {e}")
 

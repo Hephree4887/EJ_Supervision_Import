@@ -90,6 +90,7 @@
     <Content Include="sql_scripts\financial\create_primarykeys_financial.sql" />
     <Content Include="sql_scripts\financial\gather_drops_and_selects_financial.sql" />
     <Content Include="sql_scripts\financial\gather_feeinstanceids.sql" />
+    <Content Include="sql_scripts\financial\missing_table_check.sql" />
     <Content Include="sql_scripts\financial\update_joins_financial.sql" />
     <Content Include="sql_scripts\justice\create_primarykeys.sql" />
     <Content Include="sql_scripts\justice\gather_caseids.sql" />
@@ -99,12 +100,14 @@
     <Content Include="sql_scripts\justice\gather_hearingids.sql" />
     <Content Include="sql_scripts\justice\gather_partyids.sql" />
     <Content Include="sql_scripts\justice\gather_warrantids.sql" />
+    <Content Include="sql_scripts\justice\missing_table_check.sql" />
     <Content Include="sql_scripts\justice\update_joins.sql" />
     <Content Include="sql_scripts\justice\__pycache__\__init__.cpython-39.pyc" />
     <Content Include="sql_scripts\lob\gather_lobs.sql" />
     <Content Include="sql_scripts\operations\create_primarykeys_operations.sql" />
     <Content Include="sql_scripts\operations\gather_documentids.sql" />
     <Content Include="sql_scripts\operations\gather_drops_and_selects_operations.sql" />
+    <Content Include="sql_scripts\operations\missing_table_check.sql" />
     <Content Include="sql_scripts\operations\update_joins_operations.sql" />
     <Content Include="sql_scripts\operations\__pycache__\__init__.cpython-39.pyc" />
   </ItemGroup>

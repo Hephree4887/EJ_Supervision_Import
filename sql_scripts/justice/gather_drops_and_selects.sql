@@ -53,7 +53,6 @@ GO
     WHERE 
         t.is_ms_shipped=0 
         AND t.[type]='U' 
-        AND s.[NAME] NOT IN ('ChangeTrackingArchive')
     ORDER BY 
         s.[NAME], t.[NAME]
 GO
