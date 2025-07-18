@@ -97,7 +97,7 @@ def validate_environment() -> None:
 def load_config(config_file: str | None = None) -> dict[str, Any]:
     """Load configuration from JSON file if provided, otherwise use defaults."""
     config: dict[str, Any] = {
-        "include_empty_tables": False,
+        "include_empty_tables": True,  # Changed from False to True
         "always_include_tables": [],
         "log_filename": DEFAULT_LOG_FILE,
         "sql_timeout": ETLConstants.DEFAULT_SQL_TIMEOUT,  # seconds
@@ -364,7 +364,6 @@ def execute_lob_column_updates(
         )
         
         # Standardized cursor handling
-        columns = None
         try:
             if hasattr(cursor, "mappings"):
                 # SQLAlchemy 1.4+ CursorResult object - returns dictionaries directly
@@ -390,19 +389,23 @@ def execute_lob_column_updates(
             return
 
         for idx, row in enumerate(tqdm(rows, desc="Optimizing LOB Columns", unit="column"), 1):
-            # Since we standardized all cursor results to dictionaries above, 
-            # we should always get dictionaries here
-            if isinstance(row, dict):
-                row_dict = row
-            elif hasattr(row, '_mapping'):
-                # For SQLAlchemy RowMapping objects
-                row_dict = row._mapping
+            # Handle SQLAlchemy RowMapping objects properly
+            if hasattr(row, '_mapping'):
+                # SQLAlchemy RowMapping object
+                alter_sql = row._mapping.get('Alter_Statement')
+            elif isinstance(row, dict):
+                # Regular dictionary
+                alter_sql = row.get('Alter_Statement')
+            elif hasattr(row, 'get'):
+                # Dict-like object with get method
+                alter_sql = row.get('Alter_Statement')
             else:
-                # This should not happen with our standardized approach above
-                logger.error(f"Unexpected row type {type(row)}: {row}")
-                continue
-                
-            alter_sql = row_dict.get('Alter_Statement')
+                # Try to access as attribute or index
+                try:
+                    alter_sql = getattr(row, 'Alter_Statement', None) or row[0]
+                except (AttributeError, IndexError, TypeError):
+                    logger.error(f"Cannot extract Alter_Statement from row type {type(row)}: {row}")
+                    continue
 
             if alter_sql:
                 try:
