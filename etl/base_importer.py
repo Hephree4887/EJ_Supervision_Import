@@ -318,23 +318,40 @@ class BaseDBImporter:
             logger.error(f"Failed processing empty table query: {e}")
             return
 
+        # ENHANCED: Support both key names and add logging
+        always_include_tables = (
+            self.config.get("always_include_tables", []) or 
+            self.config.get("always-inclusive_tables", [])
+        )
+        
         overrides = {
-            t.strip().lower() for t in self.config.get("always_include_tables", [])
+            t.strip().lower() for t in always_include_tables
         }
+        
+        logger.info(f"Found {len(overrides)} tables in always_include_tables override list: {list(overrides)}")
 
         with transaction_scope(conn):
             for row in rows:
                 schema_name = validate_sql_identifier(row.get("SchemaName") or row.get("schemaname"))
                 table_name = validate_sql_identifier(row.get("TableName") or row.get("tablename"))
+                
+                # ENHANCED: More comprehensive pattern matching
                 patterns = [
                     f"{schema_name}.{table_name}".lower(),
                     f"{self.db_name}.{schema_name}.{table_name}".lower(),
                     f"{self.DB_TYPE.lower()}.{schema_name}.{table_name}".lower(),
+                    # Add table name only pattern for flexibility
+                    table_name.lower()
                 ]
 
-                if any(p in overrides for p in patterns):
+                # Check if this table is protected
+                is_protected = any(p in overrides for p in patterns)
+                
+                if is_protected:
+                    logger.info(f"PROTECTED: Not dropping empty table {schema_name}.{table_name} (found in always_include_tables)")
                     continue
 
+                logger.info(f"DROPPING: Empty table {schema_name}.{table_name} (0 rows, not protected)")
                 drop_sql = f"DROP TABLE IF EXISTS {schema_name}.{table_name}"
                 try:
                     sanitize_sql(
@@ -350,13 +367,24 @@ class BaseDBImporter:
 
     def _fetch_table_operation_rows(self, conn: Any, db_name: str, table_name: str) -> list[dict[str, Any]]:
         """Retrieve rows describing table operations to perform."""
+        
+        # Determine the correct TableUsedSelects table name based on DB_TYPE
+        table_used_selects = (
+            f'TableUsedSelects_{self.DB_TYPE}' if self.DB_TYPE != 'Justice' else 'TableUsedSelects'
+        )
+        table_used_selects = validate_sql_identifier(table_used_selects)
+        
         query = f"""
-            SELECT RowID, DatabaseName, SchemaName, TableName, fConvert, ScopeRowCount,
-                   CAST(Drop_IfExists AS NVARCHAR(MAX)) AS Drop_IfExists,
-                   CAST(CAST(Select_Into AS NVARCHAR(MAX)) + CAST(ISNULL(Joins, N'') AS NVARCHAR(MAX)) AS NVARCHAR(MAX)) AS [Select_Into]
+            SELECT S.RowID, S.DatabaseName, S.SchemaName, S.TableName, S.fConvert, S.ScopeRowCount,
+                   CAST(S.Drop_IfExists AS NVARCHAR(MAX)) AS Drop_IfExists,
+                   CAST(CAST(S.Select_Into AS NVARCHAR(MAX)) + CAST(ISNULL(S.Joins, N'') AS NVARCHAR(MAX)) AS NVARCHAR(MAX)) AS [Select_Into]
             FROM {db_name}.dbo.{table_name} S
-            WHERE fConvert=1
-            ORDER BY DatabaseName, SchemaName, TableName
+            INNER JOIN {db_name}.dbo.{table_used_selects} TUS 
+                ON S.DatabaseName = TUS.DatabaseName 
+                AND S.SchemaName = TUS.SchemaName 
+                AND S.TableName = TUS.TableName
+            WHERE S.fConvert=1
+            ORDER BY S.DatabaseName, S.SchemaName, S.TableName
         """
 
         cursor = execute_sql_with_timeout(
@@ -478,9 +506,17 @@ class BaseDBImporter:
     def _process_table_operation_row(
         self, conn: Any, row_dict: dict[str, Any], idx: int, log_file: str
     ) -> bool:
+        # Quick check for fConvert value from CSV joins spreadsheet
+        fconvert = row_dict.get("fConvert")
+        if fconvert != 1:
+            table_name = validate_sql_identifier(row_dict.get("TableName"))
+            schema_name = validate_sql_identifier(row_dict.get("SchemaName"))
+            full_table_name = f"{schema_name}.{table_name}"
+            logger.info(f"RowID:{idx} Skipping table ({self.DB_TYPE}.{full_table_name}) - fConvert={fconvert}")
+            return True  # Return True to indicate successful processing (skip)
+    
         drop_sql = row_dict.get("Drop_IfExists", "")
         select_into_sql = row_dict.get("Select_Into", "")
-        fconvert = row_dict.get("fConvert")
         row_id = row_dict.get("RowID")
 
         table_name = validate_sql_identifier(row_dict.get("TableName"))

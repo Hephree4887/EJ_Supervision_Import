@@ -53,6 +53,7 @@ GO
     WHERE 
         t.is_ms_shipped=0 -- Exclude system tables
         AND t.[type]='U'  -- User tables only
+        AND s.[NAME] NOT IN ('ChangeTrackingArchive','ChangeTracking','WebAppConfig')
     ORDER BY 
         s.[NAME], t.[NAME]
 GO

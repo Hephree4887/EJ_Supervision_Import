@@ -5,7 +5,6 @@ import os
 import argparse
 import json
 from typing import Any, Optional
-import urllib
 from dotenv import load_dotenv
 from utils.etl_helpers import SQLExecutionError
 from tqdm import tqdm
@@ -246,24 +245,37 @@ def gather_lob_columns(
         """
         
         for row in rows:
-            # All rows should be dictionaries at this point
-            if not isinstance(row, dict):
-                logger.error(f"Expected dictionary, got {type(row)}: {row}")
+            # Enhanced: Handle all SQLAlchemy row types
+            try:
+                if hasattr(row, 'get') and callable(row.get):
+                    # Both dict and RowMapping have .get() method
+                    row_dict = row
+                elif hasattr(row, '_mapping'):
+                    # Some SQLAlchemy objects have _mapping attribute
+                    row_dict = dict(row._mapping)
+                elif hasattr(row, '__getitem__') and hasattr(row, 'keys'):
+                    # Row-like object that can be converted to dict
+                    row_dict = dict(row)
+                else:
+                    # Last resort: try to convert to dict
+                    row_dict = dict(row)
+            except Exception as convert_error:
+                logger.error(f"Cannot convert row to dictionary: {type(row)}: {row} - Error: {convert_error}")
                 continue
                 
-            schema_name = row.get("SchemaName")
-            table_name = row.get("TableName")
-            column_name = row.get("ColumnName")
-            datatype = row.get("DataType")
-            row_cnt = row.get("RowCnt") or 0
+            schema_name = row_dict.get("SchemaName")
+            table_name = row_dict.get("TableName")
+            column_name = row_dict.get("ColumnName")
+            datatype = row_dict.get("DataType")
+            row_cnt = row_dict.get("RowCnt") or 0
             
             # Validate required fields
             if not all([schema_name, table_name, column_name, datatype]):
-                logger.error(f"Missing required fields in row: {row}")
+                logger.error(f"Missing required fields in row: {row_dict}")
                 continue
             
             # Skip empty tables unless configured otherwise
-            overrides = {t.lower() for t in settings.always_include_tables}
+            overrides = {t.lower() for t in config.get("always_include_tables", [])}
             full_name = f"{schema_name}.{table_name}".lower()
             if (
                 not config["include_empty_tables"]
@@ -299,7 +311,7 @@ def gather_lob_columns(
                             'table_name': table_name,
                             'column_name': column_name,
                             'datatype': datatype,
-                            'current_length': row.get("CurrentLength"),
+                            'current_length': row_dict.get("CurrentLength"),
                             'row_cnt': row_cnt,
                             'max_len': max_length,
                             'alter_statement': alter_column_sql,
@@ -382,6 +394,9 @@ def execute_lob_column_updates(
             # we should always get dictionaries here
             if isinstance(row, dict):
                 row_dict = row
+            elif hasattr(row, '_mapping'):
+                # For SQLAlchemy RowMapping objects
+                row_dict = row._mapping
             else:
                 # This should not happen with our standardized approach above
                 logger.error(f"Unexpected row type {type(row)}: {row}")

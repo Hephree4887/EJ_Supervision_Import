@@ -350,20 +350,16 @@ class App(tk.Tk):
             os.path.splitext(os.path.basename(path))[0] + ".progress.json",
         )
 
-        resume = False
+        # Always assume fresh migration - remove existing progress file
         if os.path.exists(progress_file):
-            resume = messagebox.askyesno(
-                "Resume Migration",
-                "A previous migration was interrupted. Resume from last progress?",
-            )
-            if not resume:
-                try:
-                    os.remove(progress_file)
-                except OSError:
-                    pass
+            try:
+                os.remove(progress_file)
+                logger.info(f"Removed existing progress file: {progress_file}")
+            except OSError as e:
+                logger.warning(f"Could not remove progress file {progress_file}: {e}")
 
         my_env["PROGRESS_FILE"] = progress_file
-        my_env["RESUME"] = "1" if resume else "0"
+        my_env["RESUME"] = "0"  # Always set to fresh migration
         
         # Stop any existing runner
         if self.current_runner and self.current_runner.is_alive():
