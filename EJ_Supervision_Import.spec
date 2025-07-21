@@ -1,0 +1,130 @@
+# ej_supervision_import.spec
+# -*- mode: python ; coding: utf-8 -*-
+
+block_cipher = None
+
+a = Analysis(
+    ['run_etl.py'],
+    pathex=['.'],
+    binaries=[],
+    datas=[
+        ('sql_scripts', 'sql_scripts'),
+        ('config', 'config'),
+        ('utils', 'utils'),
+        ('etl', 'etl'),
+        ('db', 'db'),
+    ],
+    hiddenimports=[
+        # GUI imports
+        'tkinter',
+        'tkinter.messagebox',
+        'tkinter.scrolledtext',
+        'tkinter.filedialog',
+        'tkinter.ttk',
+        
+        # Database and data processing
+        'pyodbc',
+        'pandas',
+        'pandas._libs.tslibs.base',
+        'pandas._libs.tslibs.offsets',
+        'sqlalchemy',
+        'sqlalchemy.dialects.mssql',
+        'sqlalchemy.pool',
+        
+        # Configuration and security
+        'pydantic',
+        'pydantic_settings',
+        'pydantic.v1',  # Add this for newer pydantic versions
+        'cryptography',
+        'cryptography.fernet',
+        'keyring',
+        'keyring.backends',
+        
+        # Other utilities
+        'dotenv',
+        'tqdm',
+        'importlib.util',
+        'contextlib',
+        'queue',
+        'threading',
+        'pathlib',
+        'json',
+        'logging',
+        'logging.handlers',
+        'datetime',
+        'io',
+        're',
+        'os',
+        'sys',
+        
+        # ETL modules that need to be imported dynamically
+        '01_JusticeDB_Import',
+        '02_OperationsDB_Import', 
+        '03_FinancialDB_Import',
+        '04_LOBColumns',
+        
+        # ETL dependencies
+        'etl.configurable_importer',
+        'etl.base_importer',
+        'etl.core',
+        'etl.runner',
+        
+        # Utils dependencies  
+        'utils.logging_helper',
+        'utils.etl_helpers',
+        'utils.progress_tracker',
+        
+        # Config dependencies
+        'config.settings',
+        
+        # DB dependencies
+        'db.mssql',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        'matplotlib',
+        'numpy.random._pickle',
+        'test',
+        'tests',
+        'unittest',
+        'PIL',  # If not needed
+        'scipy',  # If not needed
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name='EJ_Supervision_Import',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,  # Disable UPX to avoid issues
+    console=True,  # Enable console for debugging build issues
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    # icon='icon.ico'  # Comment out or add actual icon file
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,  # Disable UPX here too
+    upx_exclude=[],
+    name='EJ_Supervision_Import'
+)

@@ -1,0 +1,109 @@
+{
+  "rules": [
+    {
+      "rule-type": "selection",
+      "rule-id": "1",
+      "rule-name": "1",
+      "object-locator": {
+        "schema-name": "dbo",
+        "table-name": "%"
+      },
+      "rule-action": "include"
+    },
+    {
+      "rule-type": "selection",
+      "rule-id": "2",
+      "rule-name": "2",
+      "object-locator": {
+        "schema-name": "Extension",
+        "table-name": "%"
+      },
+      "rule-action": "include"
+    },
+    {
+      "rule-type": "selection",
+      "rule-id": "3",
+      "rule-name": "3",
+      "object-locator": {
+        "schema-name": "Interview",
+        "table-name": "%"
+      },
+      "rule-action": "include"
+    },
+    {
+      "rule-type": "selection",
+      "rule-id": "4",
+      "rule-name": "4",
+      "object-locator": {
+        "schema-name": "Jail",
+        "table-name": "%"
+      },
+      "rule-action": "include"
+    },
+    {
+      "rule-type": "selection",
+      "rule-id": "5",
+      "rule-name": "5",
+      "object-locator": {
+        "schema-name": "Pretrial",
+        "table-name": "%"
+      },
+      "rule-action": "include"
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "11",
+      "rule-name": "11",
+      "rule-target": "schema",
+      "object-locator": {
+        "schema-name": "dbo"
+      },
+      "rule-action": "rename",
+      "value": "CLP_Conv_7373_ElPaso_TX_DMS"
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "12",
+      "rule-name": "12",
+      "rule-target": "schema",
+      "object-locator": {
+        "schema-name": "Extension"
+      },
+      "rule-action": "rename",
+      "value": "CLP_Conv_7373_ElPaso_TX_DMS"
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "13",
+      "rule-name": "13",
+      "rule-target": "schema",
+      "object-locator": {
+        "schema-name": "Interview"
+      },
+      "rule-action": "rename",
+      "value": "CLP_Conv_7373_ElPaso_TX_DMS"
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "14",
+      "rule-name": "14",
+      "rule-target": "schema",
+      "object-locator": {
+        "schema-name": "Jail"
+      },
+      "rule-action": "rename",
+      "value": "CLP_Conv_7373_ElPaso_TX_DMS"
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "15",
+      "rule-name": "15",
+      "rule-target": "schema",
+      "object-locator": {
+        "schema-name": "Pretrial"
+      },
+      "rule-action": "rename",
+      "value": "CLP_Conv_7373_ElPaso_TX_DMS"
+    }
+  ]
+}

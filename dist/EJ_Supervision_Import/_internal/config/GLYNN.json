@@ -1,0 +1,22 @@
+{
+  "driver": "{ODBC Driver 17 for SQL Server}",
+  "server": "dc-7394-glynn-ga-main.cecsly956e2j.us-gov-west-1.rds.amazonaws.com,1433",
+  "database": "Glynn_GA",
+  "user": "dcMaster",
+  "password": "Heigohghoot2EiShek",
+  "ej_csv_dir": "C:/Users/jeff.reichert/OneDrive - Tyler Technologies, Inc/Documents/GitHub/ga_glynn_7394/Pre-DMS",
+  "ej_log_dir": "C:/LargeFileHolder/7394/EJ_ImporterLogs",
+  "include_empty_tables": false,
+  "always_include_tables": [
+    "Justice.dbo.SupClinicalScreening",
+    "Justice.dbo.SupPartyReferral",
+    "Justice.dbo.SupPartyPSI",
+    "Justice.dbo.SupervisionRec",
+    "Justice.dbo.SupervisionRec",
+    "Justice.dbo.xPartyGrpParty",
+    "Justice.dbo.xPartyGrpCase",
+    "Justice.Pretrial.Interview",
+    "Financial.dbo.FeeInst",
+    "Operations.dbo.Doc"
+  ]
+}
