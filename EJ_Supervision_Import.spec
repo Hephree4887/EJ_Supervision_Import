@@ -25,8 +25,6 @@ a = Analysis(
         # Database and data processing
         'pyodbc',
         'pandas',
-        'pandas._libs.tslibs.base',
-        'pandas._libs.tslibs.offsets',
         'sqlalchemy',
         'sqlalchemy.dialects.mssql',
         'sqlalchemy.pool',
@@ -34,7 +32,6 @@ a = Analysis(
         # Configuration and security
         'pydantic',
         'pydantic_settings',
-        'pydantic.v1',  # Add this for newer pydantic versions
         'cryptography',
         'cryptography.fernet',
         'keyring',
@@ -85,12 +82,11 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         'matplotlib',
-        'numpy.random._pickle',
         'test',
         'tests',
         'unittest',
-        'PIL',  # If not needed
-        'scipy',  # If not needed
+        'PIL',
+        'scipy',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -109,13 +105,12 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,  # Disable UPX to avoid issues
-    console=True,  # Enable console for debugging build issues
+    upx=False,
+    console=True,
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # icon='icon.ico'  # Comment out or add actual icon file
 )
 
 coll = COLLECT(
@@ -124,7 +119,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=False,  # Disable UPX here too
+    upx=False,
     upx_exclude=[],
     name='EJ_Supervision_Import'
 )
